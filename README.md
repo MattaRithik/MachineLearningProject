@@ -1,150 +1,150 @@
 # Cross-Market Transfer Learning for Stock Return Prediction
 
 Can a model trained on U.S. stocks help predict next-month stock returns in the UK and Japan, especially with little
-local data? The project compares Elastic Net, XGBoost and a cross-sectional Transformer (local-only, direct transfer,
+local data? The project compares Elastic Net, XGBoost and cross-sectional neural models (local-only, direct transfer,
 fine-tuned, joint and ensemble) on the Jensen–Kelly–Pedersen (JKP) data.
 
-## Structure
+| | Version 1 | Version 2 |
+|---|---|---|
+| Code | tag `v1.0` (branch `main`) | branch `v2` |
+| Notebook sections | 1–40 (frozen, shared code) | 41–51 |
+| Outputs | `results/`, `logs/` | `results_v2/<variant>/`, `logs_v2/` |
+| Status | full run completed on Amarel | code only; not trained yet |
 
-| Path | Purpose |
-|---|---|
-| `Cross_Market_Project.ipynb` | All research code; every training switch is off by default |
-| `amarel/` | SLURM jobs that run the notebook on Rutgers Amarel |
-| `data/` | Licensed input data, **not included** (see `data/README.md`) |
-| `results/`, `logs/` | Models, predictions, evaluation and job logs, not included |
-| `requirements.txt` | Pinned Python packages |
+**Version 2 is an exploratory follow-up designed after the Version 1 test results were seen.** It reuses the same test
+period (January 2020 – December 2025), which is therefore not an untouched holdout. Training ends in December 2017, and
+all selection uses 2018–2019. No test month is changed or removed.
 
-## 1. Clone on Amarel
+In this branch the Version 1 switches raise an error, so Version 1 results cannot be changed. To rerun Version 1, check
+out `v1.0` in a separate folder.
 
-Off campus, connect to the Rutgers VPN first. Replace `NETID` with your NetID.
+## Version 2 experiments
+
+Every variant changes one setting of its reference (Section 41 of the notebook checks this), with the same seeds, search
+size and architecture size. `combined` is the only variant with several changes.
+
+| Variant | Reference | Change | Question |
+|---|---|---|---|
+| `control` | – | Version 1 Transformer and loss, small search | Baseline of the ablations |
+| `huber` | `control` | Huber loss | Robust loss |
+| `clip` | `control` | targets clipped at training quantiles | Robust targets |
+| `clip_month` | `control` | targets clipped within each training month | Robust targets |
+| `robust` | `huber` | adds `clip` | Base of the variants below |
+| `select_clip`, `select_ic` | `robust` | select by clipped MSE or rank IC | Selection rule |
+| `rank` | `robust` | ranking objective | Ranking-aware loss |
+| `missing` | `robust` | missing-value indicators | Features |
+| `mlp`, `gated` | `robust` | stockwise MLP; MLP with gated attention | Architecture |
+| `dropout`, `gradclip`, `schedule`, `earlystop` | `robust` | one each | Regularization |
+| `joint50`, `joint75` | `robust` | 50% or 75% local months (U.S./local 50/50 and 25/75) | Joint sampling |
+| `combined` | `robust` | seven changes, fixed in advance | Joint effect |
+| `b_control` | – | Version 1 baselines | Baseline control |
+| `b_clip` | `b_control` | clipped training targets | Baselines |
+| `b_grid` | `b_clip` | data-scaled Elastic Net, regularized XGBoost search | Baselines |
+| `b_ic`, `b_missing`, `b_huber` | `b_grid` | rank-IC selection; indicators; pseudo-Huber XGBoost | Baselines |
+
+Each Transformer variant also builds four ensembles with the same `b_grid` baselines: equal (Version 1 rule), inverse
+MSE, rank IC and shrunken nonnegative stacking. Weights use validation data only.
+
+**How variants are compared.** `compare` writes to `results_v2/comparison/`:
+
+- `validation.csv`: validation scores next to the reference. Use this table to choose between variants.
+- `tests.csv`: paired block-bootstrap tests on test months against the reference, against Version 1, and of each ensemble
+  weighting against equal weights, with Holm adjustment. Exploratory.
+- `summary.csv`: the original metrics, three drawdown definitions and the sensitivity scenarios (quintiles, 25 bps,
+  returns limited to ±100%, no micro or nano stocks).
+- `month_influence.csv`, `outliers.csv`, and a figure.
+
+## Run on a laptop
+
+Everything is off by default, so **Run All trains nothing**. Switches are in the first settings cell:
+
+1. Run All with the defaults. Sections 1–11 read the data; configuration checks run in every section.
+2. `RUN_SMOKE_TESTS = True` and Run All: short code checks on artificial months; nothing is saved.
+3. Short real run, kept apart in `results_v2_2epochs/`: `RESEARCH_EPOCHS = 2`, `RUN_V2 = True`,
+   `V2_STAGES = ["train", "predict", "evaluate"]`, `V2_VARIANTS = ["mlp"]`, `V2_STRATEGIES = ["localmatched"]`.
+   Other strategies also train on U.S. history and take much longer.
+
+Reset the switches afterwards. Clear outputs that show stock-level data before committing.
+
+## Run on Amarel
+
+### 1. Get the code
+
+Use a separate clone next to the Version 1 folder, so Version 1 stays untouched. Off campus, connect to the VPN first.
 
 ```bash
 ssh NETID@amarel.rutgers.edu
 cd ~
-git clone https://github.com/MattaRithik/MachineLearningProject.git
-cd MachineLearningProject
+git clone -b v2 https://github.com/MattaRithik/MachineLearningProject.git MachineLearningProject_v2
+cd MachineLearningProject_v2
 ```
 
-## 2. Transfer the data privately
+The existing environment (`~/envs/cross-market`), data (`~/MachineLearningProject/data`) and Version 1 results
+(`~/MachineLearningProject/results`, read only) are found automatically. Otherwise set `CMP_ENV`, `CMP_DATA_DIR` or
+`CMP_V1_RESULTS` before submitting. No new packages are needed. For a first installation, see the README of `v1.0`.
 
-Run this **on your own computer**, from the folder that holds the three files. `-L` follows symbolic links.
-
-```bash
-rsync -avL --progress USA.parquet GBR.parquet JPN.parquet NETID@amarel.rutgers.edu:MachineLearningProject/data/
-```
-
-On Amarel, check them with `ls -lh ~/MachineLearningProject/data`. The notebook reads `data/` inside the project folder;
-set `CMP_DATA_DIR` to use another folder. Git ignores the data, so `git pull` never changes or deletes it.
-
-## 3. Create the Python environment
-
-Amarel does not allow programs on login nodes, so work in an interactive job:
+### 2. Check the environment and data
 
 ```bash
-srun --partition=main --cpus-per-task=4 --mem=16G --time=02:00:00 --pty bash
-```
-
-Python 3.12 is required. Use any conda available to you. The user guide lists a community Miniconda; confirm that it
-still exists after the move to RHEL 9:
-
-```bash
-ls /projects/community/miniconda3/bin/conda
-/projects/community/miniconda3/bin/conda create -y -p ~/envs/cross-market python=3.12
-```
-
-If it is missing, install [Miniforge](https://github.com/conda-forge/miniforge) in your home directory and use its
-`conda`. Then install PyTorch with CUDA 12.6, followed by the other packages:
-
-```bash
-cd ~/MachineLearningProject
-~/envs/cross-market/bin/pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cu126
-~/envs/cross-market/bin/pip install -r requirements.txt
-exit
-```
-
-No CUDA module is needed, because the PyTorch package includes its CUDA libraries. If your environment is elsewhere, run
-`export CMP_ENV=/path/to/env` before submitting jobs.
-
-## 4. Verify the environment
-
-```bash
+srun --partition=main --cpus-per-task=2 --mem=8G --time=00:10:00 \
+    ~/envs/cross-market/bin/python amarel/check_data.py ~/MachineLearningProject/data
 srun --partition=gpu --gres=gpu:1 --cpus-per-task=2 --mem=8G --time=00:10:00 \
     ~/envs/cross-market/bin/python amarel/verify_environment.py
 ```
 
-## 5. Small verification jobs
-
-Submit every job from the project folder.
+### 3. Small jobs
 
 ```bash
-sbatch --time=01:00:00 amarel/gpu_job.slurm preflight   # does the largest cross-section fit in GPU memory?
-sbatch --time=01:00:00 amarel/gpu_job.slurm smoke       # short code checks; saves no models
+sbatch --time=01:00:00 amarel/gpu_job.slurm preflight
+sbatch --time=01:00:00 amarel/gpu_job.slurm smoke
+CMP_EPOCHS=2 CMP_V2_STRATEGIES=localmatched bash amarel/submit_v2.sh mlp --submit     # results_v2_2epochs/
 ```
 
-A short rehearsal with 5 epochs is kept apart in `results_5epochs/`:
+### 4. Submit Version 2
+
+Nothing is submitted without `--submit`.
 
 ```bash
-CMP_EPOCHS=5 sbatch amarel/gpu_job.slurm local
+bash amarel/submit_v2.sh all             # show the plan
+bash amarel/submit_v2.sh all --submit    # 24 variants, then evaluation, then comparison
+bash amarel/submit_v2.sh robust --submit # or one variant (needs no other variant)
+bash amarel/submit_v2.sh evaluate --submit    # afterwards: evaluate what is available, then compare
 ```
 
-## 6. Individual experiments
+Variants are independent and can run in any order; SLURM queues them within your GPU limit. Evaluation starts only if
+all variants succeeded. Single stages: `sbatch amarel/gpu_job.slurm train:robust`, `predict:robust`, and
+`sbatch amarel/cpu_job.slurm evaluate:robust`. Never run one variant twice at the same time; the submit script refuses this.
 
-| Order | Experiment | Command | Requires |
-|---|---|---|---|
-| 1 | Elastic Net and XGBoost | `sbatch amarel/cpu_job.slurm baselines` | – |
-| 2 | Local Transformers | `sbatch amarel/gpu_job.slurm local` | – |
-| 3 | U.S. pretraining | `sbatch amarel/gpu_job.slurm pretrained` | – |
-| 4 | Direct transfer | `sbatch amarel/gpu_job.slurm direct` | 3 |
-| 5 | Fine-tuning | `sbatch amarel/gpu_job.slurm finetuned` | 3 |
-| 6 | Joint training | `sbatch amarel/gpu_job.slurm joint` | 3 |
-| 7 | Matched local Transformers | `sbatch amarel/gpu_job.slurm localmatched` | 3 |
-| 8 | Test predictions | `sbatch amarel/gpu_job.slurm predictions` | 1–7 |
-| 9 | Final evaluation | `sbatch amarel/cpu_job.slurm evaluation` | 8 |
+**Resuming.** Resubmit the same command. Completed experiments are verified and skipped; unfinished ones start again. Every
+saved model carries a fingerprint of its full configuration, and an incompatible or Version 1 model raises an error. To start a
+variant over, move its folder away first.
 
-Run experiments 3–7 one at a time, because they share one results file. Never run the same experiment twice at once.
-Resources can be changed at submission, for example `sbatch --mem=64G --time=2-00:00:00 amarel/gpu_job.slurm joint`.
-Add `--constraint=...` or `--account=...` only if your allocation needs it.
+Each variant folder holds `config.json` (settings, seeds, predictors, data rows, Git commit, packages), `models/`,
+`validation.csv`, `predictions/` and `evaluation/`. Job logs are `logs_v2/cmp2-<variant>_<job>.out`, and executed notebooks are in
+`results_v2/executed/`.
 
-## 7. Full sequence
+### 5. Monitor and retrieve
 
 ```bash
-bash amarel/submit_all.sh
-```
-
-Each step starts only if its prerequisites succeeded. For a 5-epoch rehearsal, use `CMP_EPOCHS=5 bash amarel/submit_all.sh`.
-
-**Restarting.** Saved experiments are verified and skipped, and unfinished ones start again, so a failed or preempted job
-can simply be resubmitted. Predictions are never overwritten automatically: to replace them, move
-`results/test_predictions.parquet` first.
-
-## 8. Monitor and retrieve
-
-```bash
-squeue -u $USER                                          # job status
-tail -f logs/cmp-pretrained_JOBID.out                    # live progress
-sacct -j JOBID --format=JobID,State,Elapsed,MaxRSS       # finished jobs
-scancel JOBID                                            # cancel
+squeue -u $USER
+tail -f logs_v2/cmp2-robust_JOBID.out
+sacct -u $USER --starttime=today --format=JobID,JobName%24,State,ExitCode,Elapsed,MaxRSS
 ```
 
 On your own computer:
 
 ```bash
-rsync -av NETID@amarel.rutgers.edu:MachineLearningProject/results/ results/
+mkdir -p ~/Desktop/Cross_Market_Versions/Version_2
+rsync -av NETID@amarel.rutgers.edu:MachineLearningProject_v2/results_v2 \
+    NETID@amarel.rutgers.edu:MachineLearningProject_v2/logs_v2 ~/Desktop/Cross_Market_Versions/Version_2/
 ```
 
-## 9. Update the code
+### 6. Update the code
 
-```bash
-cd ~/MachineLearningProject
-git pull
-```
+Run `git pull` only when no jobs are waiting, because jobs read the notebook when they start. After any change to Version 2
+training code, increase `V2_CODE_VERSION` in Section 42.
 
-Data, results and logs are ignored by Git and stay in place. Do not pull while jobs are waiting to start, because they
-read the notebook when they begin. Clear notebook outputs that show stock-level data before committing.
+## Data and publication
 
-## Notes
-
-- GPU jobs are limited to 72 hours and one GPU per user at a time, and jobs may be preempted. See the
-  [Amarel user guide](https://go.rutgers.edu/hpc-user-guide).
-- The returns contain extreme values that are not clipped or removed; see the notebook.
-- Nothing in this repository has been run on Amarel yet.
+The data are licensed through WRDS and are never committed; see `data/README.md`. Git also ignores models, predictions,
+results, logs and ZIP archives. Predictions and executed notebooks contain stock-level values, so keep them private.

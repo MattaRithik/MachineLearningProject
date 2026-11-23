@@ -13,6 +13,12 @@ results/*
 results_*/
 logs/*
 !logs/.gitkeep
+logs_v2/*
+!logs_v2/.gitkeep
+*.zip
+*.tar.gz
+*.bundle
+Version_*/
 *.joblib
 *.pt
 *.pth
