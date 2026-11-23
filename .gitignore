@@ -1,0 +1,53 @@
+# Licensed data (WRDS / JKP): never commit
+data/*
+!data/README.md
+*.parquet
+*.csv
+*.xlsx
+*.feather
+*.h5
+
+# Results, models, predictions and logs
+results/*
+!results/.gitkeep
+results_*/
+logs/*
+!logs/.gitkeep
+*.joblib
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+*.tmp
+*.out
+*.err
+*.log
+slurm-*
+
+# Credentials
+.env
+.env.*
+.pgpass
+pgpass.conf
+*.pem
+*.key
+*.ppk
+id_rsa*
+id_ed25519*
+*token*
+*credential*
+*secret*
+
+# Environments, caches and editor files
+.venv/
+venv/
+env/
+envs/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.cache/
+.DS_Store
+.vscode/
+.idea/
