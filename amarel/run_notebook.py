@@ -26,8 +26,7 @@ class StreamingClient(NotebookClient):
 def main():
     stage = sys.argv[1]
     notebook = nbformat.read(NOTEBOOK, as_version=4)
-    epochs = int(os.environ.get("CMP_EPOCHS", 100))
-    output_dir = Path("results_v3" if epochs == 100 else f"results_v3_{epochs}epochs") / "executed"
+    output_dir = Path(os.environ["CMP_LOG_DIR"])
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{stage}_{os.environ.get('SLURM_JOB_ID', 'local')}.ipynb"
 
