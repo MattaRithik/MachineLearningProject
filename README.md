@@ -6,10 +6,10 @@ fine-tuned, joint and ensemble) on the Jensen–Kelly–Pedersen (JKP) data.
 
 | | Version 1 | Version 2 |
 |---|---|---|
-| Code | tag `v1.0` (branch `main`) | branch `v2` |
-| Notebook sections | 1–40 (frozen, shared code) | 41–51 |
+| Code | tag `v1.0` (branch `main`) | tag `v2.0-experiment` (branch `v2`); audit on `v2-finalization` |
+| Notebook sections | 1–40 (frozen, shared code) | 41–51; audit 52–60 |
 | Outputs | `results/`, `logs/` | `results_v2/<variant>/`, `logs_v2/` |
-| Status | full run completed on Amarel | code only; not trained yet |
+| Status | full run completed on Amarel | training, evaluation and comparison of all 24 variants completed on Amarel |
 
 **Version 2 is an exploratory follow-up designed after the Version 1 test results were seen.** It reuses the same test
 period (January 2020 – December 2025), which is therefore not an untouched holdout. Training ends in December 2017, and
@@ -17,6 +17,23 @@ all selection uses 2018–2019. No test month is changed or removed.
 
 In this branch the Version 1 switches raise an error, so Version 1 results cannot be changed. To rerun Version 1, check
 out `v1.0` in a separate folder.
+
+## Results and audit
+
+Read [FINAL_RESULTS.md](FINAL_RESULTS.md) (provisional), [MODEL_SELECTION.md](MODEL_SELECTION.md), [V2_AUDIT_REPORT.md](V2_AUDIT_REPORT.md),
+[REPRODUCIBILITY.md](REPRODUCIBILITY.md) and [FINAL_CHANGELOG.md](FINAL_CHANGELOG.md). The results of `v2` are frozen; the audit on this branch reads them
+and writes only to `audit_v2/`. It trains nothing and has not yet been run on the full data.
+
+```bash
+ssh NETID@amarel.rutgers.edu
+cd ~ && git clone -b v2-finalization https://github.com/MattaRithik/MachineLearningProject.git MachineLearningProject_audit
+cd MachineLearningProject_audit
+bash amarel/submit_audit.sh             # show the plan (reads ../MachineLearningProject_v2/results_v2)
+bash amarel/submit_audit.sh --submit    # one CPU job
+```
+
+Set `CMP_V2_RESULTS`, `CMP_DATA_DIR` or `CMP_ENV` if your folders differ. `audit_v2/private/` contains licensed stock-level records: keep it private.
+Synthetic tests (no data): `python tests/test_audit.py`.
 
 ## Version 2 experiments
 
@@ -95,6 +112,7 @@ srun --partition=gpu --gres=gpu:1 --cpus-per-task=2 --mem=8G --time=00:10:00 \
 ### 3. Small jobs
 
 ```bash
+source amarel/git_state.sh && resolve_git_state     # records the commit for direct sbatch calls
 sbatch --time=01:00:00 amarel/gpu_job.slurm preflight
 sbatch --time=01:00:00 amarel/gpu_job.slurm smoke
 CMP_EPOCHS=2 CMP_V2_STRATEGIES=localmatched bash amarel/submit_v2.sh mlp --submit     # results_v2_2epochs/
@@ -111,7 +129,7 @@ bash amarel/submit_v2.sh robust --submit # or one variant (needs no other varian
 bash amarel/submit_v2.sh evaluate --submit    # afterwards: evaluate what is available, then compare
 ```
 
-Variants are independent and can run in any order; SLURM queues them within your GPU limit. Evaluation starts only if
+**Version 2 has already run; these commands are for a new, separate reproduction.** Variants are independent and can run in any order; SLURM queues them within your GPU limit. Evaluation starts only if
 all variants succeeded. Single stages: `sbatch amarel/gpu_job.slurm train:robust`, `predict:robust`, and
 `sbatch amarel/cpu_job.slurm evaluate:robust`. Never run one variant twice at the same time; the submit script refuses this.
 

@@ -8,6 +8,9 @@ set -euo pipefail
 [ -f Cross_Market_Project.ipynb ] || { echo "ERROR: run this from the project folder." >&2; exit 1; }
 source amarel/env.sh
 source amarel/variants.sh
+source amarel/git_state.sh
+resolve_git_state
+echo "Commit: $CMP_GIT_COMMIT (uncommitted changes: $CMP_GIT_DIRTY)"
 target="${1:?Usage: submit_v2.sh <all|evaluate|variant> [--submit]}"
 mode="${2:-}"
 for country in USA GBR JPN; do
@@ -27,7 +30,7 @@ submit() {  # submit <script> <step> [dependency job IDs joined by ':']
         echo "ERROR: a job named $name is already queued or running; two jobs must not share one variant." >&2
         exit 1
     fi
-    local options=(--parsable --job-name="$name")
+    local options=(--parsable --export=ALL --job-name="$name")
     [ -n "${3:-}" ] && options+=(--dependency="afterok:$3" --kill-on-invalid-dep=yes)
     local id
     id=$(sbatch "${options[@]}" "amarel/$1" "$2")

@@ -4,6 +4,7 @@
 #   <variant>                  train the variant and generate its forecasts
 #   train:<v> | predict:<v> | evaluate:<v>   one stage of a variant (or of several, comma-separated)
 #   evaluate                   evaluate every available variant
+#   audit                      read-only audit of completed Version 2 results (Sections 52-60)
 #   compare                    ablation tests and comparison with Version 1
 set -euo pipefail
 step="$1"
@@ -19,17 +20,27 @@ source amarel/variants.sh
 
 # Everything off; Version 1 always stays off in this branch
 export CMP_PROJECT_ROOT="$PWD"
-export CMP_RUN_MODE=off CMP_PREDICTIONS=0 CMP_EVALUATION=0 CMP_SMOKE_TESTS=0 CMP_PREFLIGHT=0 CMP_V2=0
+export CMP_RUN_MODE=off CMP_PREDICTIONS=0 CMP_EVALUATION=0 CMP_SMOKE_TESTS=0 CMP_PREFLIGHT=0 CMP_V2=0 CMP_AUDIT=0
 unset CMP_EXPERIMENTS CMP_V2_STAGES CMP_V2_VARIANTS
-commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-[ -z "$(git status --porcelain --untracked-files=no 2>/dev/null)" ] || commit="$commit-modified"
-export CMP_GIT_COMMIT="$commit"
+
+# Commit resolved on the submission host; only a direct sbatch without it tries git here
+if [ -z "${CMP_GIT_COMMIT:-}" ]; then
+    source amarel/git_state.sh
+    resolve_git_state || { echo "ERROR: submit with submit_v2.sh or submit_audit.sh, which record the Git commit." >&2; exit 1; }
+fi
+current=$(sha256sum Cross_Market_Project.ipynb | cut -d' ' -f1)
+if [ "$current" != "${CMP_NOTEBOOK_SHA256:-$current}" ]; then
+    echo "ERROR: the notebook changed after submission (commit $CMP_GIT_COMMIT was recorded). Submit again." >&2
+    exit 1
+fi
+commit="$CMP_GIT_COMMIT (dirty: ${CMP_GIT_DIRTY:-unknown})"
 
 all=$(IFS=,; echo "${ALL_VARIANTS[*]}")
 case "$step" in
     smoke)     export CMP_SMOKE_TESTS=1 ;;
     preflight) export CMP_PREFLIGHT=1 ;;
     evaluate)  export CMP_V2=1 CMP_V2_STAGES=evaluate CMP_V2_VARIANTS="$all" ;;
+    audit)     export CMP_AUDIT=1 ;;
     compare)   export CMP_V2=1 CMP_V2_STAGES=compare CMP_V2_VARIANTS="$all" ;;
     train:*|predict:*|evaluate:*)
                export CMP_V2=1 CMP_V2_STAGES="${step%%:*}" CMP_V2_VARIANTS="${step#*:}" ;;

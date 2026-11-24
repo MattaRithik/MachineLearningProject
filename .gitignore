@@ -11,6 +11,7 @@ data/*
 results/*
 !results/.gitkeep
 results_*/
+audit_v2*/
 logs/*
 !logs/.gitkeep
 logs_v2/*

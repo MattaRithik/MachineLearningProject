@@ -27,7 +27,10 @@ def main():
     experiment = sys.argv[1]
     notebook = nbformat.read(NOTEBOOK, as_version=4)
     epochs = int(os.environ.get("CMP_EPOCHS", 100))
-    output_dir = Path("results_v2" if epochs == 100 else f"results_v2_{epochs}epochs") / "executed"
+    if os.environ.get("CMP_AUDIT") == "1":  # never inside a Version 2 results folder
+        output_dir = Path(os.environ.get("CMP_AUDIT_DIR", "audit_v2")) / "private" / "executed"
+    else:
+        output_dir = Path("results_v2" if epochs == 100 else f"results_v2_{epochs}epochs") / "executed"
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{experiment}_{os.environ.get('SLURM_JOB_ID', 'local')}.ipynb"
 
