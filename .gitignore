@@ -1,6 +1,5 @@
 # Licensed data (WRDS / JKP): never commit
-data/*
-!data/README.md
+data/
 *.parquet
 *.csv
 *.xlsx
@@ -8,14 +7,11 @@ data/*
 *.h5
 
 # Results, models, predictions and logs
-results/*
-!results/.gitkeep
+results/
 results_*/
 audit_v2*/
-logs/*
-!logs/.gitkeep
-logs_v2/*
-!logs_v2/.gitkeep
+logs/
+logs_v*/
 *.zip
 *.tar.gz
 *.bundle

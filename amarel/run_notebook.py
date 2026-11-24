@@ -24,15 +24,12 @@ class StreamingClient(NotebookClient):
 
 
 def main():
-    experiment = sys.argv[1]
+    stage = sys.argv[1]
     notebook = nbformat.read(NOTEBOOK, as_version=4)
     epochs = int(os.environ.get("CMP_EPOCHS", 100))
-    if os.environ.get("CMP_AUDIT") == "1":  # never inside a Version 2 results folder
-        output_dir = Path(os.environ.get("CMP_AUDIT_DIR", "audit_v2")) / "private" / "executed"
-    else:
-        output_dir = Path("results_v2" if epochs == 100 else f"results_v2_{epochs}epochs") / "executed"
+    output_dir = Path("results_v3" if epochs == 100 else f"results_v3_{epochs}epochs") / "executed"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output = output_dir / f"{experiment}_{os.environ.get('SLURM_JOB_ID', 'local')}.ipynb"
+    output = output_dir / f"{stage}_{os.environ.get('SLURM_JOB_ID', 'local')}.ipynb"
 
     client = StreamingClient(notebook, timeout=None, kernel_name="python3", resources={"metadata": {"path": "."}})
     try:
