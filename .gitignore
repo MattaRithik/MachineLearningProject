@@ -7,15 +7,11 @@ data/
 *.h5
 
 # Results, models, predictions and logs
-results/
-results_*/
-audit_v2*/
-logs/
-logs_v*/
+results*/
+logs*/
 *.zip
 *.tar.gz
 *.bundle
-Version_*/
 *.joblib
 *.pt
 *.pth

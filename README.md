@@ -3,51 +3,65 @@
 Can a model pretrained on U.S. stocks help predict next-month stock returns in the UK and Japan, especially with little local data? The
 project uses Jensen–Kelly–Pedersen (JKP) data and cross-sectional Transformers, with Elastic Net and XGBoost as baselines.
 
-Everything is in one notebook, [Cross_Market_Project.ipynb](Cross_Market_Project.ipynb), which explains the design. Training ends in December 2017; 2018–2019 chooses
-checkpoints and the final model. The 2020–2025 test period has been examined in earlier versions and is exploratory.
+All research code is in [Cross_Market_Project.ipynb](Cross_Market_Project.ipynb), which explains the design. The three data files are its only
+inputs. Training ends in December 2017; 2018–2019 chooses checkpoints and the final model. The 2020–2025 test period was examined in earlier
+experiments, so its results are exploratory. The full run has not been executed yet; no result is claimed.
 
-| Version | Where |
+| Path | Content |
 |---|---|
-| 1 | tag `v1.0` |
-| 2 (24 variants) | tag `v2.0-experiment`; audit and reports on branch `v2-finalization` |
-| 3 | branch `v3`: configurations frozen after Stage 1; full run not executed yet, no improvement is claimed |
+| `Cross_Market_Project.ipynb` | data checks, features, models, training, selection, forecasts, evaluation, figures |
+| `amarel/` | `submit.sh` (plan and submit), `job.sh` (one SLURM job), `run_notebook.py` (runs the notebook without a browser) |
+| `data/` | the Parquet files (not included) |
+| `results/`, `logs/` | created by a run |
 
 ## Data (not included)
 
-Place `USA.parquet` (1,604,094 rows), `GBR.parquet` (534,295) and `JPN.parquet` (1,175,157) in `data/`. Source: WRDS `contrib.global_factor`, January 2000 –
-December 2025, with `common = exch_main = primary_sec = obs_main = 1`; 165 columns. The data are licensed and must not be redistributed.
-Git ignores `data/` and `results_*/`; the results contain stock-level forecasts and must stay private.
+Place `USA.parquet` (1,604,094 rows), `GBR.parquet` (534,295) and `JPN.parquet` (1,175,157) in `data/`. Source: WRDS `contrib.global_factor`,
+January 2000 – December 2025, with `common = exch_main = primary_sec = obs_main = 1`; 165 columns. The data are licensed and must not
+be redistributed. Results contain stock-level forecasts and must stay private. Git ignores `data/`, `results/` and `logs/`.
 
-The full run also reads the saved Version 2 `rank` forecasts (`results_v2/rank/predictions/`) for the comparison. They are verified and never changed.
+The notebook verifies the checksums of the reference files. For another JKP extract with the same columns, set `REQUIRE_REFERENCE_DATA = False` in
+the notebook or `CMP_REFERENCE_DATA=0` on Amarel; results will then differ.
+
+## Environment
+
+Python 3.12. On a Mac: `pip install -r requirements.txt`. On Amarel, create it once in an interactive job:
+
+```bash
+srun --partition=main --cpus-per-task=4 --mem=16G --time=02:00:00 --pty bash
+conda create -y -p ~/envs/cross-market python=3.12      # for example /projects/community/miniconda3/bin/conda, or Miniforge
+~/envs/cross-market/bin/pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cu126
+~/envs/cross-market/bin/pip install -r requirements.txt
+exit
+```
 
 ## Run in Jupyter
 
-1. `pip install -r requirements.txt` (Python 3.12), then open the notebook.
-2. **Run All with the defaults:** defines everything; reads no data and trains nothing.
-3. Set one stage switch in Section 1 to `True`, restart the kernel and Run All, in the order of the table at the top of the notebook, or use
-   `RUN_FULL_PIPELINE = True` for everything. A stage stops with a clear message if an earlier stage is missing. Set `CMP_V2_DIR` if the
-   Version 2 results are not in `../MachineLearningProject/results_v2`.
-
-For a short trial use `MAX_EPOCHS = 2`; its outputs go to `results_v3_full_2epochs/`. Training is meant for a GPU.
+Run All with the defaults only defines everything: it reads no data and trains nothing. To run a stage, set its switch in Section 1 to `True`, restart the
+kernel and Run All, in the order of the table at the top of the notebook (data checks first). `RUN_FULL_PIPELINE = True` runs everything. A fresh run needs an
+empty `results/`; `RESUME = True` continues an interrupted one. Training is meant for a GPU.
 
 ## Run on Amarel
 
 ```bash
-bash amarel/submit_v3.sh full             # complete plan; launches nothing
-bash amarel/submit_v3.sh full --submit    # data checks -> baselines, pretraining, local -> transfer -> selection -> test forecasts -> evaluation
+rsync -av --exclude .git --exclude results --exclude logs Cross_Market_Project NETID@amarel.rutgers.edu:    # from the Mac, with data/
+cd ~/Cross_Market_Project                  # on an Amarel login node
+bash amarel/submit.sh                      # checks, jobs and resources; submits nothing
+bash amarel/submit.sh --submit             # fresh run
+bash amarel/submit.sh --resume --submit    # continue the same run after a failure
 ```
 
-Set `CMP_ENV` if your environment is not `~/envs/cross-market`, `CMP_DATA_DIR` if the data are neither in `data/` nor in `../MachineLearningProject/data`, and
-`CMP_V2_DIR` as above. A failed job prevents all later ones. Read its log, then submit again: complete runs are verified and
-skipped, and runs saved with other settings raise an error and are never overwritten. For a first installation, see the README of `v1.0`.
+`CMP_ENV` selects another environment (default: the active conda environment, else `~/envs/cross-market`) and `CMP_DATA_DIR` another data folder. A
+failed job prevents all later ones; read `logs/`, then resume. Files of another run are never reused or overwritten.
 
-## Outputs (`results_v3_full/`)
+## Outputs (`results/`)
 
-| Folder | Content |
+| Path | Content |
 |---|---|
-| `checkpoints/` | models and one JSON record per run (settings, seed, history, time, Git revision, software, checksums) |
-| `predictions/validation/`, `predictions/test/` | stock-level forecasts (private) |
-| `tables/` | aggregate tables and figures; start with `validation_leaderboard.csv`, `test_comparisons.csv` and `v2_v3_comparison.csv` |
-| `logs/` | job logs and executed notebooks (private) |
+| `run.json`, `settings.json`, `features.json` | identity and settings of the run |
+| `selection.json` | model selected on validation, locked before any test forecast |
+| `checkpoints/` | models and one record per run (settings, seed, history, time, software, checksums) |
+| `predictions/` | validation and test forecasts (private) |
+| `tables/` | aggregate tables and figures; start with `validation_leaderboard.csv`, `test_comparisons.csv`, `final_comparison.csv` |
 
-`selection.json` is locked before any test forecast.
+Job logs and executed notebooks are in `logs/<run id>/` (private).
